@@ -1,0 +1,146 @@
+Sample of NOA-II coding in MATLAB
+
+%% Problem Parameters
+FitFunction=@(x) Trid(x); 
+nVar=10;
+VarMin=-100;         % Lower Bound of Variables
+VarMax= 100;         % Upper Bound of Variables
+%% NOA-II Parameters
+global NFE;
+NFE=0;
+MaxIt=400;   % maximum iteration
+Nplasma=350; % number of plasma
+mun=12.72;   % viscosity of nephron
+muv=120.72;  % viscosity of efferent
+alpha=0.3;   % filtrated data percentage   
+K=20.3;      % permeability coefficient
+nn=round(alpha*Nplasma); % number of data within nephron
+nv=round((1-alpha)*Nplasma); % number of data within efferent
+%% Initialization
+Empty_Individual.Position=[];
+Empty_Individual.Fit=[];
+Empty_Individual.Similarity=[];
+Empty_Individual.Devider=[];
+plasma=repmat(Empty_Individual,Nplasma,1);
+for i=1:Nplasma
+plasma(i,1).Position=unifrnd(VarMin,VarMax,[1 nVar]);
+plasma(i,1).Fit=FitFunction(plasma(i).Position);
+plasma(i,1).Similarity=0;
+plasma(i,1).Devider=0;
+end
+Fits=[plasma.Fit];
+[Fits, SortOrder]=sort(Fits);
+plasma=plasma(SortOrder,1);
+BestSol=plasma(1);
+BestFit=zeros(MaxIt,1);
+WorstFit=plasma(end).Fit; 
+nfe=zeros(MaxIt,1);
+%% Main Loop 
+for it=1:MaxIt
+    Wplasma=plasma(end).Position;
+    Bplasma=plasma(1).Position;
+%measure similarity of plasmas to best
+    for i=1:Nplasma
+        t=0;
+        for j=1:nVar
+             t=t+(plasma(i).Position(1,j)-Bplasma(1,j))^2;
+        end
+        plasma(i,1).Similarity=sqrt(t);
+    end
+%sort based on low similarity    
+    Sims=[plasma.Similarity];
+    [Sims, SortOrder]=sort(Sims, 'descend');
+    plasma=plasma(SortOrder,1);
+%filtrate    
+    for i=1:nn
+       plasma(i,1).Devider=1; 
+    end
+    
+    for i=nn+1:Nplasma
+       plasma(i,1).Devider=2; 
+    end
+%measure pressure of Nephron and Efferent    
+    tn=zeros([1 nVar]);
+    tv=zeros([1 nVar]);
+    for i=1:nn
+       tn=tn+plasma(i,1).Position; 
+    end
+    
+    for i=nn+1:Nplasma
+       tv=tv+plasma(i,1).Position; 
+    end  
+    pn=tn/nn;
+    pv=tv/nv;    
+%mitochondria plasma inside Nephron
+Mplasma=repmat(Empty_Individual,nn,1);
+rho=rand;
+    for k=1:nn
+      coe=rand;
+      i=randi([1  Nplasma]);
+      if rho<=0.3
+          Mplasma(k).Position=plasma(i).Position+coe*plasma(k).Position;
+      else
+          Mplasma(k).Position=plasma(i).Position-coe*plasma(k).Position;
+      end  
+      Mplasma(k).Fit=FitFunction(Mplasma(k).Position);
+      Mplasma(k).Devider=1;
+    end  
+%reabsorption
+
+        q=(-K/mun)*(pn-pv);
+        Rplasma=repmat(Empty_Individual,Nplasma,1);
+        for i=1:nn
+            Rplasma(i,1).Position=plasma(i,1).Position+(nn/nv)*(Wplasma-plasma(i,1).Position)+q;
+            Rplasma(i).Fit=FitFunction(Rplasma(i).Position);
+            Rplasma(i).Devider=1;
+        end
+        
+        for i=nn+1:Nplasma
+            Rplasma(i,1).Position=plasma(i,1).Position+(nn/nv)*(Bplasma-plasma(i,1).Position)+q;        
+            Rplasma(i).Fit=FitFunction(Rplasma(i).Position);
+            Rplasma(i).Devider=1;
+        end
+        plasma(1).Devider=2;
+        nn=nn-1;
+        nv=nv+1;
+%secretion
+        q=(-K/muv)*(pv-pn);
+        Splasma=repmat(Empty_Individual,Nplasma,1);
+        for i=1:nn
+            Splasma(i,1).Position=plasma(i,1).Position+(nv/nn)*(Wplasma-plasma(i,1).Position)+q;
+            Splasma(i).Fit=FitFunction(Splasma(i).Position);
+            Splasma(i).Devider=1;
+        end
+        
+        for i=nn+1:Nplasma
+            Splasma(i,1).Position=plasma(i,1).Position+(nv/nn)*(Bplasma-plasma(i,1).Position)+q;  
+            Splasma(i).Fit=FitFunction(Splasma(i).Position);
+            Splasma(i).Devider=1;
+        end
+        plasma(end).Devider=1;
+        nn=nn+1;
+        nv=nv-1;
+%excretion
+    plasma=[Mplasma;Rplasma;Splasma;plasma];
+    Fits=[plasma.Fit];
+    [Fits, SortOrder]=sort(Fits);
+    plasma=plasma(SortOrder,1);
+    plasma=plasma(1:Nplasma);
+%Results
+    BestSol=plasma(1);
+    WorstSol=plasma(end);
+    BestFit(it)=BestSol.Fit;
+    WorstFit(it)=WorstSol.Fit;
+    SumSol=0;
+    for m=1:Nplasma
+       SumSol=SumSol+plasma(m).Fit;
+    end
+    MeanSol=SumSol/Nplasma;
+    MeanFit(it)=MeanSol;
+    nfe(it)=NFE;
+    disp(['Iteration' num2str(it) ': NFE = ' num2str(nfe(it)) ',Best Fit= ' num2str(BestFit(it)) ',Worst Fit= ' num2str(WorstFit(it)) ',Mean Fit= ' num2str(MeanFit(it))]);
+end
+
+
+
+
